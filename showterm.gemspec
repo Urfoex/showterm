@@ -1,6 +1,10 @@
+
+$LOAD_PATH.unshift File.expand_path("../lib", __FILE__)
+require "showterm/version"
+
 Gem::Specification.new do |s|
   s.name = "showterm"
-  s.version = "0.4.0"
+  s.version = Showterm::Version::String
   s.platform = Gem::Platform::RUBY
   s.author = "Conrad Irwin"
   s.email = "conrad.irwin@gmail.com"

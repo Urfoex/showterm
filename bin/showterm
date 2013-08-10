@@ -1,30 +1,106 @@
 #!/usr/bin/env ruby
 
-require File.join(File.dirname(File.dirname(__FILE__)), 'lib/showterm')
+$LOAD_PATH << File.expand_path('../lib', File.dirname(__FILE__))
+
+require 'optparse'
+require 'showterm'
+require 'showterm/version'
 
 class Showterm::Main
 
   def run
-    if ARGV.include?('-h') || ARGV.include?('--help')
+    @action = :record_and_upload
+    @ask_before_upload = false
+    @edit_timings = false
+    @save_only = false
 
-      help
+    option_parser.parse! ARGV
+    send @action
+  end
 
-    elsif ARGV[0] == '--retry'
+  def option_parser
+    @option_parser ||= OptionParser.new do |opts|
+      opts.version = Showterm::Version::STRING
 
-      ARGV.shift
-      reupload
+      opts.summary_width = 20
+      opts.summary_indent = '  '
 
-    else
 
-      if '-e' == ARGV[0] || '--edit' == ARGV[0]
-        @edit_timings = true
-        ARGV.shift
+      # newline + pad to align option descriptions
+      nl = "\n#{' ' * (opts.summary_width + 3)}"
+
+      opts.banner = <<EOF
+showterm will record the exact output of your session,
+and upload it to the internet where it can be replayed
+by anyone to whom you give the URL.
+
+EOF
+
+      opts.define_head "Usage: #{opts.program_name} [-a] [-e] <command to run>"
+
+      opts.separator ''
+      opts.separator 'Recording Options:'
+
+      opts.on("-a", "--ask", "Ask for confirmation before uploading") do |value|
+        @ask_before_upload = true
       end
 
-      sf, tf = record
-      sf, tf = edit(sf, tf) if @edit_timings
-      upload sf, tf
+      opts.on("-e", "--edit", "Edit the timings file before uploading. This can#{nl}be nice if you want to take long pauses (such as#{nl}searching an answer out) in between commands.") do
+        @edit_timings = true
+      end
+
+      opts.on("-s", "--save", "Save the recording locally instead of uploading.#{nl}Afterwords, use --retry to finish the upload.") do
+        @save_only = true
+      end
+
+      opts.on("-r", "--retry", "Attempt an upload again (args: <script> <times>)") do
+        opts.terminate
+        @action = :retry
+      end
+
+      opts.separator ''
+      opts.separator 'Other Options:'
+
+      opts.on("-h", "--help", "Show this message") do
+        puts opts
+        exit
+      end
+
+      opts.on("-v", "--version", "Show Version") do
+        puts opts.ver
+        exit
+      end
+
     end
+  end
+
+  def ask_yesno(*args)
+    print(*args)
+    print(" [y/N] ")
+    case $stdin.gets
+    when /^y$/, /^yes$/
+      true
+    else
+      false
+    end
+  end
+
+  def record_and_upload
+    sf, tf = record
+
+    if @save_only
+      die_politely "Saving recording (no upload)", sf, tf
+    end
+
+    sf, tf = edit(sf, tf) if @edit_timings
+
+    if @ask_before_upload
+      unless ask_yesno("Upload?")
+        die_politely "Upload canceled!", sf, tf
+      end
+    end
+
+    upload sf, tf
   end
 
   def record
@@ -32,22 +108,6 @@ class Showterm::Main
     sf, tf = Showterm.record!(*ARGV)
     puts 'showterm recording finished.'
     [sf, tf]
-  end
-
-  def help
-    puts <<-EOF
-      Usage: showterm [-e] <command to run>
-
-      showterm will record the exact output of your session, and upload it to the
-      internet where it can be replayed by anyone to whom you give the URL.
-
-      You can pass `-e` as the first arg and it will allow you to edit the timings
-      file before uploading. This can be nice if you want to take long pauses (such
-      as searching an answer out) in between commands.
-
-      If you would like to attempt an upload again
-      showterm --retry <script> <times>
-    EOF
   end
 
   def reupload
