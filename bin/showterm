@@ -89,18 +89,18 @@ EOF
     sf, tf = record
 
     if @save_only
-      die_politely "Saving recording (no upload)", sf, tf
-    end
+      save_politely "Saving the recording (no upload)", sf, tf
+    else
+      sf, tf = edit(sf, tf) if @edit_timings
 
-    sf, tf = edit(sf, tf) if @edit_timings
-
-    if @ask_before_upload
-      unless ask_yesno("Upload?")
-        die_politely "Upload canceled!", sf, tf
+      if @ask_before_upload
+        unless ask_yesno("Upload?")
+          die_politely "Upload canceled!", sf, tf
+        end
       end
-    end
 
-    upload sf, tf
+      upload sf, tf
+    end
   end
 
   def record
@@ -141,21 +141,34 @@ EOF
     [sf, tf]
   end
 
+  def hot_vim_tips
+    [ "Hot vim tips:",
+      "",
+      "Use :cq  from vim to exit nonzero, and cancel the upload",
+      "Use :%s/^[0-9]\./0./  to get rid of all longish pauses."
+    ].join("\n")
+  end
+
+  def vim?
+    'vim' == editor
+  end
+
+  def editor_instructions
+    if vim?
+      hot_vim_tips
+    else
+      "If you can make your editor return nonzero, it will cancel the upload."
+    end
+  end
+
   def prepare_to_edit
-    puts "Recording done, now it's time to dress up those timings!" +
-         if 'vim' == editor
-           <<-TIPS
-             Hot vim tips:
-
-             Use :cq  from vim to exit nonzero, and cancel the upload
-             Use :%s/^[0-9]\./0./  to get rid of all longish pauses.
-           TIPS
-         else
-           "If you can make your editor return nonzero, it will cancel the upload."
-         end +
-         "[Hit Enter to edit]"
-
-    $stdin.readline
+    puts [
+      '',
+      "Recording done, now it's time to dress up those timings!",
+      editor_instructions,
+      '',
+      "[Hit Enter to edit]"
+    ].join("\n")
   end
 
   def save(which, data)
@@ -166,16 +179,27 @@ EOF
     path
   end
 
-  def die_politely(message, sf, tf)
+  def save_politely(message, sf, tf)
     script_path = save 'script', sf
-    times_path = save 'times', tf
-    puts <<-MESSAGE
-      #{message}
-      your work is safe in "#{script_path}" and "#{times_path}"
-      To try uploading manually, use:
-      showterm --retry "#{script_path}" "#{times_path}"
-    MESSAGE
-    exit 1
+    times_path  = save 'times',  tf
+
+    $stdout.print <<MESSAGE
+
+#{message}
+
+Your work is safe in these files:
+  "#{script_path}"
+  "#{times_path}"
+
+To try uploading manually, use:
+  showterm --retry '#{script_path}' '#{times_path}'
+
+MESSAGE
+  end
+
+  def die_politely(message, sf, tf, retval = 1)
+    save_politely(message, sf, tf)
+    exit retval
   end
 
   def dedent(str)
